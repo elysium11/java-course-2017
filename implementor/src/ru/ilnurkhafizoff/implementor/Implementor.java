@@ -10,6 +10,7 @@ import static java.lang.reflect.Modifier.isProtected;
 import static java.lang.reflect.Modifier.isPublic;
 import static java.lang.reflect.Modifier.isStatic;
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.nio.file.Files.*;
 import static java.nio.file.StandardOpenOption.CREATE;
 import static java.nio.file.StandardOpenOption.TRUNCATE_EXISTING;
 import static java.util.Arrays.stream;
@@ -19,10 +20,8 @@ import static java.util.stream.Collectors.toList;
 import info.kgeorgiy.java.advanced.implementor.Impler;
 import info.kgeorgiy.java.advanced.implementor.ImplerException;
 import info.kgeorgiy.java.advanced.implementor.JarImpler;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.Reader;
 import java.io.UncheckedIOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Executable;
@@ -76,9 +75,9 @@ public class Implementor implements Impler, JarImpler {
       Path packagePath = Paths.get(aClass.getPackage().getName().replace(".", "/"));
       implementationPath = path.resolve(packagePath).resolve(implementationName + ".java");
 
-      Files.createDirectories(implementationPath.getParent());
+      createDirectories(implementationPath.getParent());
 
-      Files.write(
+      write(
           implementationPath.toAbsolutePath(),
           implementation.getBytes(UTF_8),
           CREATE,
@@ -91,7 +90,8 @@ public class Implementor implements Impler, JarImpler {
 
   private String generateImplementation(Class<?> parent, String implementationName)
       throws ImplerException {
-    if (parent.isPrimitive() || parent.isEnum() || parent.equals(Enum.class) || parent.isArray() || isFinal(
+    if (parent.isPrimitive() || parent.isEnum() || parent.equals(Enum.class) || parent.isArray()
+        || isFinal(
         parent.getModifiers())) {
       throw new ImplerException(
           "Implementing class should not be primitive, array, enum or final.");
@@ -101,7 +101,8 @@ public class Implementor implements Impler, JarImpler {
 
     String classDeclaration = composeClassDeclaration(parent, implementationName);
 
-    String constructorsImplementation = getConstructorsImplementation(parent.getDeclaredConstructors(),
+    String constructorsImplementation = getConstructorsImplementation(
+        parent.getDeclaredConstructors(),
         implementationName);
 
     String methodsImplementation = getMethodsImplementation(parent);
@@ -133,7 +134,8 @@ public class Implementor implements Impler, JarImpler {
 
   private String getConstructorsImplementation(Constructor<?>[] constructors, String className)
       throws ImplerException {
-    if (constructors.length == 0 || stream(constructors).anyMatch(c -> !isPrivate(c.getModifiers()))) {
+    if (constructors.length == 0 || stream(constructors)
+        .anyMatch(c -> !isPrivate(c.getModifiers()))) {
       return stream(constructors)
           .filter(c -> !isPrivate(c.getModifiers()))
           .map(c -> composeConstructorImplementation(c, className))
@@ -257,7 +259,6 @@ public class Implementor implements Impler, JarImpler {
         .add(method.getName() + parametersDeclaration)
         .add("{")
         .toString();
-//        "  " + accessModifier + " " + " " + method.getName() + parametersDeclaration + " {";
 
     String body = "    return ";
     if (returnType.isPrimitive()) {
@@ -289,17 +290,28 @@ public class Implementor implements Impler, JarImpler {
 
   @Override
   public void implementJar(Class<?> aClass, Path path) throws ImplerException {
-    Path compiledClassesDir = path.getParent().resolve("classes");
+    Path rootPackagePath = path.toAbsolutePath().getParent().resolve(getRootPackage(aClass));
 
-    implement(aClass, compiledClassesDir);
+    implement(aClass, path);
     compileJavaFile(implementationPath);
 
     try {
       deleteSourceFile(implementationPath);
-      archiveToJar(compiledClassesDir, path);
+      Path jarPath = path.resolve(aClass.getSimpleName() + ".jar");
+      archiveToJar(rootPackagePath, jarPath);
     } catch (IOException e) {
       throw new UncheckedIOException(e);
     }
+  }
+
+  private String getRootPackage(Class<?> aClass) {
+    String packageName = aClass.getPackage().getName();
+
+    if (packageName.length() != 0) {
+      return packageName.split("\\.")[0];
+    }
+
+    return "";
   }
 
   private void compileJavaFile(Path file) {
@@ -308,30 +320,38 @@ public class Implementor implements Impler, JarImpler {
   }
 
   private void deleteSourceFile(Path file) throws IOException {
-    Files.deleteIfExists(file);
+    deleteIfExists(file);
   }
 
-  private void archiveToJar(Path compiledClassesDir, Path jarPath) throws IOException {
-    try (JarOutputStream jarOutputStream = new JarOutputStream(Files.newOutputStream(jarPath))) {
-      Files.walk(compiledClassesDir)
+  private void archiveToJar(Path rootPackagePath, Path jarPath) throws IOException {
+    try (JarOutputStream jarOutputStream = new JarOutputStream(newOutputStream(jarPath))) {
+      walk(rootPackagePath)
           .forEach(p -> writeToJar(jarOutputStream, p));
     }
   }
 
   private void writeToJar(JarOutputStream jarOutputStream, Path file) {
-    if (Files.isDirectory(file)) {
-      JarEntry jarEntry = new JarEntry(file.getFileName() + "/");
+    String fileName = file.getFileName().toString();
+    if (isDirectory(file)) {
+      fileName += "/";
+    }
+    JarEntry jarEntry = new JarEntry(fileName);
+    if (isDirectory(file)) {
       try {
+        jarEntry.setLastModifiedTime(getLastModifiedTime(file));
         jarOutputStream.putNextEntry(jarEntry);
       } catch (IOException e) {
         throw new UncheckedIOException(e);
       }
     } else {
-      try (InputStream in = Files.newInputStream(file);) {
+      try (InputStream in = newInputStream(file)) {
+        jarEntry.setLastModifiedTime(getLastModifiedTime(file));
+        jarOutputStream.putNextEntry(jarEntry);
         byte[] bytes = new byte[4096];
         int count = in.read(bytes);
         while (count != -1) {
           jarOutputStream.write(bytes, 0, count);
+          count = in.read(bytes);
         }
       } catch (IOException e) {
         throw new UncheckedIOException(e);

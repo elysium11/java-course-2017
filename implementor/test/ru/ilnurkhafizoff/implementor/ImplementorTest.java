@@ -4,6 +4,7 @@ import static org.junit.Assert.*;
 
 import info.kgeorgiy.java.advanced.implementor.ImplerException;
 import info.kgeorgiy.java.advanced.implementor.examples.ClassWithPackagePrivateConstructor;
+import info.kgeorgiy.java.advanced.implementor.examples.InterfaceWithStaticMethod;
 import java.nio.file.Paths;
 import java.util.AbstractList;
 import javax.imageio.plugins.bmp.BMPImageWriteParam;
@@ -34,6 +35,6 @@ public class ImplementorTest {
 
   @Test
   public void implementJarTest() throws ImplerException {
-    new Implementor().implementJar(AbstractList.class, Paths.get("/home/ilnur/test.jar"));
+    new Implementor().implementJar(InterfaceWithStaticMethod.class, Paths.get("."));
   }
 }
