@@ -24,7 +24,6 @@ import static java.util.Arrays.stream;
 import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toList;
 
-import info.kgeorgiy.java.advanced.implementor.Impler;
 import info.kgeorgiy.java.advanced.implementor.ImplerException;
 import info.kgeorgiy.java.advanced.implementor.JarImpler;
 import java.io.IOException;
@@ -50,11 +49,22 @@ import java.util.jar.JarOutputStream;
 import javax.tools.JavaCompiler;
 import javax.tools.ToolProvider;
 
-public class Implementor implements Impler, JarImpler {
+/**
+ * Provides implementation to {@link JarImpler} interface.
+ *
+ * @see info.kgeorgiy.java.advanced.implementor.JarImpler
+ */
+public class Implementor implements JarImpler {
 
+  /**
+   * Comparator which allows to compare methods by their signature.
+   */
   private static final Comparator<? super Method> METHOD_SIGNATURE_COMPARATOR =
       Comparator.comparing(m -> m.getName() + Arrays.toString(m.getParameterTypes()));
 
+  /**
+   * String representation of default values for primitive types;
+   */
   private static final Map<Class, String> DEFAULT_VALUES_FOR_PRIMITIVES = new HashMap<>();
 
   static {
@@ -69,13 +79,39 @@ public class Implementor implements Impler, JarImpler {
     DEFAULT_VALUES_FOR_PRIMITIVES.put(Void.TYPE, "");
   }
 
+  /**
+   * Path to implemented java file.
+   */
   private Path implementationPath;
+  /**
+   * Path to implemented jar file.
+   */
   private Path jarImplementationPath;
 
+  /**
+   * Returns implemented jar file path.
+   */
   public Path getJarImplementationPath() {
     return jarImplementationPath;
   }
 
+  /**
+   * Implements passed class or interface and writes as java source file to specified directory with
+   * preserving package structure of implemented one. Result class includes implementation for
+   * abstract methods without implementation, both declared in implementing class and inherited from
+   * ancestors, and for all available constructors declared in implementing class.
+   *
+   * <p>Body of implemented methods consists of returning default value of method's return type.
+   * Each constructor implementation call appropriate one from implementing class.</p>
+   *
+   * <p>Name of implementation class is composed of implementing class name and suffix 'Impl'.</p>
+   *
+   * @param aClass implementing class
+   * @param path directory in which implementation should be written
+   * @throws ImplerException if implementing class could not be inherited: has only private
+   * constructors, contains final modifier in class declaration and so on.
+   * @throws UncheckedIOException if IO exception occurs while writing to result file.
+   */
   @Override
   public void implement(Class<?> aClass, Path path) throws ImplerException {
     String implementationName = aClass.getSimpleName() + "Impl";
@@ -99,6 +135,13 @@ public class Implementor implements Impler, JarImpler {
     }
   }
 
+  /**
+   * Returns string representation of implementation class.
+   *
+   * @param parent implementing class
+   * @param implementationName name of implementation class
+   * @throws ImplerException if passed class could not be implemented
+   */
   private String generateImplementation(Class<?> parent, String implementationName)
       throws ImplerException {
     if (parent.isPrimitive() || parent.isEnum() || parent.equals(Enum.class) || parent.isArray()
@@ -127,11 +170,16 @@ public class Implementor implements Impler, JarImpler {
         .toString();
   }
 
+  /**
+   * Composes package declaration.
+   */
   private String composePackageDeclaration(Class<?> parent) {
     return format("package %s;", parent.getPackage().getName());
   }
 
-
+  /**
+   * Composes class declaration.
+   */
   private String composeClassDeclaration(Class<?> parent, String className) {
     String inheritanceWord = parent.isInterface() ? "implements" : "extends";
     return new StringJoiner(" ")
