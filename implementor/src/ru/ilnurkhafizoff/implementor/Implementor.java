@@ -52,8 +52,6 @@ import javax.tools.ToolProvider;
 
 public class Implementor implements Impler, JarImpler {
 
-  private Path implementationPath;
-
   private static final Comparator<? super Method> METHOD_SIGNATURE_COMPARATOR =
       Comparator.comparing(m -> m.getName() + Arrays.toString(m.getParameterTypes()));
 
@@ -69,6 +67,13 @@ public class Implementor implements Impler, JarImpler {
     DEFAULT_VALUES_FOR_PRIMITIVES.put(Float.TYPE, "0");
     DEFAULT_VALUES_FOR_PRIMITIVES.put(Double.TYPE, "0.0");
     DEFAULT_VALUES_FOR_PRIMITIVES.put(Void.TYPE, "");
+  }
+
+  private Path implementationPath;
+  private Path jarImplementationPath;
+
+  public Path getJarImplementationPath() {
+    return jarImplementationPath;
   }
 
   @Override
@@ -296,15 +301,15 @@ public class Implementor implements Impler, JarImpler {
 
   @Override
   public void implementJar(Class<?> aClass, Path path) throws ImplerException {
-    Path rootPackagePath = path.toAbsolutePath().getParent().resolve(getRootPackage(aClass));
+    Path rootPackagePath = path.toAbsolutePath().resolve(getRootPackage(aClass));
 
     implement(aClass, path);
     compileJavaFile(implementationPath);
 
     try {
       deleteSourceFile(implementationPath);
-      Path jarPath = path.resolve(aClass.getSimpleName() + ".jar");
-      archiveToJar(rootPackagePath, jarPath);
+      jarImplementationPath = path.resolve(aClass.getSimpleName() + "Impl.jar");
+      archiveToJar(rootPackagePath, jarImplementationPath);
     } catch (IOException e) {
       throw new UncheckedIOException(e);
     }

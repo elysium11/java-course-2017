@@ -1,7 +1,5 @@
 package ru.ilnurkhafizoff.implementor;
 
-import static org.junit.Assert.*;
-
 import info.kgeorgiy.java.advanced.implementor.ImplerException;
 import info.kgeorgiy.java.advanced.implementor.examples.ClassWithPackagePrivateConstructor;
 import info.kgeorgiy.java.advanced.implementor.examples.InterfaceWithStaticMethod;
