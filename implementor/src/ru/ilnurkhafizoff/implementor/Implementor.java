@@ -182,8 +182,9 @@ public class Implementor implements JarImpler {
    * access modifier
    */
   private boolean areAllConstructorsPrivate(Class<?> aClass) {
-    return stream(aClass.getDeclaredConstructors())
-        .allMatch(c -> isPrivate(c.getModifiers()));
+    return aClass.getDeclaredConstructors().length > 0 &&
+        stream(aClass.getDeclaredConstructors())
+            .allMatch(c -> isPrivate(c.getModifiers()));
   }
 
   /**
