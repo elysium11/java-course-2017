@@ -1,4 +1,4 @@
-package concurrent;
+package parallelism;
 
 import info.kgeorgiy.java.advanced.base.BaseTest;
 import org.junit.Assert;

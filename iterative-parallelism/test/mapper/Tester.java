@@ -1,9 +1,8 @@
-package concurrent;
+package mapper;
 
 import info.kgeorgiy.java.advanced.base.BaseTester;
-
-import info.kgeorgiy.java.advanced.concurrent.ListIPTest;
-import info.kgeorgiy.java.advanced.concurrent.ScalarIPTest;
+import info.kgeorgiy.java.advanced.mapper.ListMapperTest;
+import info.kgeorgiy.java.advanced.mapper.ScalarMapperTest;
 import java.io.IOException;
 import java.security.NoSuchAlgorithmException;
 
@@ -13,8 +12,8 @@ import java.security.NoSuchAlgorithmException;
 public class Tester extends BaseTester {
     public static void main(final String... args) throws NoSuchAlgorithmException, IOException {
         new Tester()
-                .add("scalar", ScalarIPTest.class)
-                .add("list", ListIPTest.class)
+                .add("scalar", ScalarMapperTest.class)
+                .add("list", ListMapperTest.class)
                 .run(args);
     }
 }

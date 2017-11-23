@@ -1,4 +1,4 @@
-package concurrent;
+package parallelism;
 
 import java.util.Comparator;
 import java.util.List;
