@@ -17,12 +17,8 @@ public class IterativeParallelism implements ListIP {
 
     List<List<? extends T>> chunks = splitToChunks(list, i);
 
-    ListTask<T, T> findMinimumTask =
-        l -> l.stream()
-            .min(comparator)
-            .orElseThrow(() -> new RuntimeException("Could not find min in array :("));
-
-    chunks.forEach(c -> executors.add(startAndReturnThread(new Executor<>(c, findMinimumTask))));
+    chunks.forEach(
+        c -> executors.add(startAndReturnThread(new Executor<>(c, minimumFinder(comparator)))));
 
     T min = null;
     for (Executor<T, T> executor : executors) {
@@ -32,7 +28,13 @@ public class IterativeParallelism implements ListIP {
     return min;
   }
 
-  private <T> List<List<? extends T>> splitToChunks(List<? extends T> list, int chunksNum) {
+  <T> ListFunction<T, T> minimumFinder(Comparator<? super T> comparator) {
+    return l -> l.stream()
+        .min(comparator)
+        .orElseThrow(() -> new RuntimeException("Could not find min in array :("));
+  }
+
+  <T> List<List<? extends T>> splitToChunks(List<? extends T> list, int chunksNum) {
     List<List<? extends T>> chunks = new ArrayList<>();
     int chunkSize = list.size() / chunksNum;
 
@@ -71,13 +73,8 @@ public class IterativeParallelism implements ListIP {
 
     List<List<? extends T>> chunks = splitToChunks(list, i);
 
-    ListTask<T, T> findMaximumTask =
-        l -> l.stream()
-            .max(comparator)
-            .orElseThrow(() -> new RuntimeException("Could not find maximum :("));
-
-    chunks.forEach(c -> executors.add(new Executor<>(c, findMaximumTask)));
-    executors.forEach(Thread::start);
+    chunks.forEach(
+        c -> executors.add(startAndReturnThread(new Executor<>(c, maximumFinder(comparator)))));
 
     T max = null;
     for (Executor<T, T> executor : executors) {
@@ -85,6 +82,12 @@ public class IterativeParallelism implements ListIP {
     }
 
     return max;
+  }
+
+  <T> ListFunction<T, T> maximumFinder(Comparator<? super T> comparator) {
+    return l -> l.stream()
+        .max(comparator)
+        .orElseThrow(() -> new RuntimeException("Could not find maximum :("));
   }
 
   private <T> boolean isLessOrNull(T value, T comparing, Comparator<? super T> comparator) {
@@ -98,20 +101,8 @@ public class IterativeParallelism implements ListIP {
 
     List<List<? extends T>> chunks = splitToChunks(list, i);
 
-    ListTask<T, Boolean> allMatchTask =
-        l -> {
-          for (T element : l) {
-            if (Thread.currentThread().isInterrupted()) {
-              return null;
-            }
-            if (!predicate.test(element)) {
-              return false;
-            }
-          }
-          return true;
-        };
-
-    chunks.forEach(c -> executors.add(startAndReturnThread(new Executor<>(c, allMatchTask))));
+    chunks.forEach(
+        c -> executors.add(startAndReturnThread(new Executor<>(c, allMatchChecker(predicate)))));
 
     for (int j = 0; j < executors.size(); j++) {
       Executor<T, Boolean> executor = executors.get(j);
@@ -126,6 +117,20 @@ public class IterativeParallelism implements ListIP {
     return true;
   }
 
+  <T> ListFunction<T, Boolean> allMatchChecker(Predicate<? super T> predicate) {
+    return l -> {
+      for (T element : l) {
+        if (Thread.currentThread().isInterrupted()) {
+          return null;
+        }
+        if (!predicate.test(element)) {
+          return false;
+        }
+      }
+      return true;
+    };
+  }
+
   @Override
   public <T> boolean any(int i, List<? extends T> list, Predicate<? super T> predicate)
       throws InterruptedException {
@@ -133,20 +138,8 @@ public class IterativeParallelism implements ListIP {
 
     List<List<? extends T>> chunks = splitToChunks(list, i);
 
-    ListTask<T, Boolean> anyMatchTask =
-        l -> {
-          for (T element : l) {
-            if (Thread.currentThread().isInterrupted()) {
-              return null;
-            }
-            if (predicate.test(element)) {
-              return true;
-            }
-          }
-          return false;
-        };
-
-    chunks.forEach(c -> executors.add(startAndReturnThread(new Executor<>(c, anyMatchTask))));
+    chunks.forEach(
+        c -> executors.add(startAndReturnThread(new Executor<>(c, anyMatchChecker(predicate)))));
 
     for (int j = 0; j < executors.size(); j++) {
       Executor<T, Boolean> executor = executors.get(j);
@@ -161,17 +154,28 @@ public class IterativeParallelism implements ListIP {
     return false;
   }
 
+  <T> ListFunction<T, Boolean> anyMatchChecker(Predicate<? super T> predicate) {
+    return l -> {
+      for (T element : l) {
+        if (Thread.currentThread().isInterrupted()) {
+          return null;
+        }
+        if (predicate.test(element)) {
+          return true;
+        }
+      }
+      return false;
+    };
+  }
+
   @Override
   public String join(int i, List<?> list) throws InterruptedException {
     List<Executor<?, String>> executors = new ArrayList<>();
 
     List<List<?>> chunks = splitToChunks(list, i);
 
-    ListTask<Object, String> joinTask = l -> l.stream()
-        .map(Object::toString)
-        .collect(joining());
-
-    chunks.forEach(chunk -> executors.add(startAndReturnThread(new Executor<>(chunk, joinTask))));
+    chunks
+        .forEach(chunk -> executors.add(startAndReturnThread(new Executor<>(chunk, listJoiner()))));
 
     StringBuilder stringBuilder = new StringBuilder();
     for (Executor<?, String> executor : executors) {
@@ -179,6 +183,12 @@ public class IterativeParallelism implements ListIP {
     }
 
     return stringBuilder.toString();
+  }
+
+  ListFunction<Object, String> listJoiner() {
+    return l -> l.stream()
+        .map(Object::toString)
+        .collect(joining());
   }
 
   @Override
@@ -189,12 +199,7 @@ public class IterativeParallelism implements ListIP {
 
     List<List<? extends T>> chunks = splitToChunks(list, i);
 
-    ListTask<T, List<T>> filterTask =
-        l -> l.stream()
-            .filter(predicate)
-            .collect(toList());
-
-    chunks.forEach(c -> executors.add(startAndReturnThread(new Executor<>(c, filterTask))));
+    chunks.forEach(c -> executors.add(startAndReturnThread(new Executor<>(c, filter(predicate)))));
 
     List<T> result = new ArrayList<>();
     for (Executor<T, List<T>> executor : executors) {
@@ -204,6 +209,12 @@ public class IterativeParallelism implements ListIP {
     return result;
   }
 
+  <T> ListFunction<T, List<T>> filter(Predicate<? super T> predicate) {
+    return l -> l.stream()
+        .filter(predicate)
+        .collect(toList());
+  }
+
   @Override
   public <T, U> List<U> map(int i, List<? extends T> list,
       Function<? super T, ? extends U> function) throws InterruptedException {
@@ -211,12 +222,7 @@ public class IterativeParallelism implements ListIP {
 
     List<List<? extends T>> chunks = splitToChunks(list, i);
 
-    ListTask<T, List<U>> mapTask =
-        l -> l.stream()
-            .map(function)
-            .collect(toList());
-
-    chunks.forEach(c -> executors.add(startAndReturnThread(new Executor<>(c, mapTask))));
+    chunks.forEach(c -> executors.add(startAndReturnThread(new Executor<>(c, mapper(function)))));
 
     List<U> result = new ArrayList<>();
     for (Executor<T, List<U>> executor : executors) {
@@ -226,15 +232,21 @@ public class IterativeParallelism implements ListIP {
     return result;
   }
 
-  private static class Executor<T, R> extends Thread {
+  <T, U> ListFunction<T, List<U>> mapper(Function<? super T, ? extends U> function) {
+    return l -> l.stream()
+        .map(function)
+        .collect(toList());
+  }
+
+  static class Executor<T, R> extends Thread {
 
     private final List<? extends T> array;
-    private final ListTask<T, R> task;
+    private final ListFunction<T, R> listFunction;
     private R result;
 
-    public Executor(List<? extends T> array, ListTask<T, R> task) {
+    public Executor(List<? extends T> array, ListFunction<T, R> listFunction) {
       this.array = array;
-      this.task = task;
+      this.listFunction = listFunction;
     }
 
     public R getResult() throws InterruptedException {
@@ -244,12 +256,9 @@ public class IterativeParallelism implements ListIP {
 
     @Override
     public void run() {
-      result = task.call(array);
+      result = listFunction.apply(array);
     }
   }
 
-  private interface ListTask<T, R> {
-
-    R call(List<? extends T> list);
-  }
+  interface ListFunction<T, R> extends Function<List<? extends T>, R> {}
 }
