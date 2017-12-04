@@ -7,19 +7,19 @@ import java.util.List;
 public class Node {
 
   private final String url;
+  private final int nodeDepth;
+  private final int maxDepth;
   private volatile Document document;
   private volatile List<Node> childs = new ArrayList<>();
   private volatile IOException error;
-  private volatile int nodeDepth;
-  private volatile int maxDepth;
+  private volatile boolean processed = false;
+  private volatile boolean repeated = false;
 
-  public Node(String url, int nodeDepth) {
-    this.url = url;
-    this.nodeDepth = nodeDepth;
-  }
+  private final Object lock = new Object();
 
   public Node(String url, int nodeDepth, int maxDepth) {
-    this(url, nodeDepth);
+    this.url = url;
+    this.nodeDepth = nodeDepth;
     this.maxDepth = maxDepth;
   }
 
@@ -59,19 +59,66 @@ public class Node {
     return nodeDepth;
   }
 
-  public void setNodeDepth(int nodeDepth) {
-    this.nodeDepth = nodeDepth;
-  }
-
   public int getMaxDepth() {
     return maxDepth;
   }
 
-  public void setMaxDepth(int maxDepth) {
-    this.maxDepth = maxDepth;
+
+  public Object getLock() {
+    return lock;
   }
 
   public boolean isLeafNode() {
     return nodeDepth == maxDepth;
+  }
+
+  public boolean isProcessed() {
+    return processed;
+  }
+
+  public boolean notProcessed() {
+//    synchronized (lock) {
+      return !processed;
+//    }
+  }
+
+  public void processed(boolean isRepeated) {
+    synchronized (lock) {
+      processed = true;
+      this.repeated = isRepeated;
+      lock.notify();
+    }
+  }
+
+  public void processed() {
+    synchronized (lock) {
+      processed = true;
+      this.repeated = false;
+      lock.notify();
+    }
+  }
+
+  public void waitProcessing() throws InterruptedException {
+    synchronized (lock) {
+      while (notProcessed()) {
+        lock.wait();
+      }
+    }
+  }
+
+  public boolean isRepeated() {
+    return repeated;
+  }
+
+
+  @Override
+  public String toString() {
+    return "Node{" +
+        "url='" + url + '\'' +
+        ", error=" + error +
+        ", nodeDepth=" + nodeDepth +
+        ", maxDepth=" + maxDepth +
+        ", processed=" + processed +
+        '}';
   }
 }

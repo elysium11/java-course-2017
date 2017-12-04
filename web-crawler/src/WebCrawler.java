@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -16,34 +17,38 @@ import org.slf4j.LoggerFactory;
 
 public class WebCrawler implements Crawler {
 
-  private static final Logger logger = LoggerFactory.getLogger(WebCrawler.class);
+  private static final Logger log = LoggerFactory.getLogger(WebCrawler.class);
 
-  private static final Consumer<? super Node> NOTIFY =
-      node -> {
-        synchronized (node) {
-          node.notify();
-        }
-      };
+  private static final Consumer<? super Node> LEAF_NODE_CALLBACK = Node::processed;
 
   private final ExecutorService downloadExecutors;
   private final ExecutorService extractExecutors;
 
-  private final DownloadHandler downloadHandler;
-  private final ExtractHandler extractHandler;
+  private final DownloadHandler2 downloadHandler;
+  private final ExtractHandler2 extractHandler;
+
+  Downloader downloader;
 
   public WebCrawler(Downloader downloader, int downloaders, int extractors, int perHost) {
-    logger.debug("Create WC with {} download threads and {} extract threads {}", downloaders, extractors);
-    downloadExecutors = Executors.newFixedThreadPool(downloaders, new NamingThreadFactory("DownloaderThread%s"));
-    extractExecutors = Executors.newFixedThreadPool(extractors, new NamingThreadFactory("ExtractorThread%s"));
+    log.debug("Create WC with {} download threads and {} extract threads {}", downloaders,
+        extractors);
+    downloadExecutors = Executors
+        .newFixedThreadPool(downloaders, new NamingThreadFactory("DownloaderThread-%s"));
+    extractExecutors = Executors
+        .newFixedThreadPool(extractors, new NamingThreadFactory("ExtractorThread-%s"));
 
-    downloadHandler = new DownloadHandler(downloader);
-    extractHandler = new ExtractHandler();
+    this.downloader = downloader;
+    downloadHandler = new DownloadHandler2(downloader);
+    extractHandler = new ExtractHandler2();
   }
 
   @Override
   public Result download(String url, int depth) {
     Node rootNode = new Node(url, 1, depth);
-    asyncDownloadAndExtract(rootNode);
+    DownloadHandler2 downloadHandler2 = new DownloadHandler2(downloader);
+    ExtractHandler2 extractHandler2 = new ExtractHandler2();
+
+    asyncDownloadAndExtract(rootNode, downloadHandler2, extractHandler2);
     try {
       return gatherDownloadedUrls(rootNode);
     } catch (InterruptedException e) {
@@ -52,55 +57,84 @@ public class WebCrawler implements Crawler {
     }
   }
 
-  private void asyncDownloadAndExtract(Node node) {
+  private void asyncDownloadAndExtract(Node node, DownloadHandler2 downloadHandler,
+      ExtractHandler2 extractHandler) {
+    log.debug("Node {} came to download and extract", node);
     downloadExecutors.submit(
-        () -> downloadHandler.download(node, node.isLeafNode() ? NOTIFY : this::asyncExtract)
+        () -> downloadHandler.download(node,
+            node.isLeafNode() ? LEAF_NODE_CALLBACK
+                : (n) -> asyncExtract(node, downloadHandler, extractHandler))
     );
-
   }
 
-  private void asyncExtract(Node downloadedNode) {
+  private void asyncExtract(Node node, DownloadHandler2 downloadHandler,
+      ExtractHandler2 extractHandler) {
     extractExecutors.submit(
-        () -> {
-          extractHandler.extract(downloadedNode, this::asyncDownloadAndExtract);
-          synchronized (downloadedNode) {
-            downloadedNode.notify();
-          }
-        }
+        () -> extractHandler
+            .extract(node, (n) -> asyncDownloadAndExtract(n, downloadHandler, extractHandler))
     );
   }
+
+//  private void asyncDownloadAndExtract(Node node, DownloadHandler2 downloadHandler,
+//      ExtractHandler extractHandler) {
+//    log.debug("Node {} came to download and extract", node);
+//    downloadExecutors.submit(
+//        () -> downloadHandler.download(node, node.isLeafNode() ? LEAF_NODE_CALLBACK : this::asyncExtract)
+//    );
+//
+//  }
+
+  // FIRST
+//  private void asyncDownloadAndExtract(Node node) {
+//    log.debug("Node {} came to download and extract", node);
+//    downloadExecutors.submit(
+//        () -> downloadHandler.download(node, node.isLeafNode() ? LEAF_NODE_CALLBACK : this::asyncExtract)
+//    );
+//
+//  }
+
+  // FIRST
+//  private void asyncExtract(Node downloadedNode) {
+//    extractExecutors.submit(
+//        () -> extractHandler.extract(downloadedNode, this::asyncDownloadAndExtract)
+//    );
+//  }
 
   private Result gatherDownloadedUrls(Node rootNode) throws InterruptedException {
-    ArrayList<String> downloadedUrls = new ArrayList<>();
+    log.debug("Start gathering...");
+    List<String> downloadedUrls = new ArrayList<>();
     HashMap<String, IOException> errors = new HashMap<>();
 
     Queue<Node> queue = new LinkedList<>();
     queue.add(rootNode);
     while (!queue.isEmpty()) {
       Node node = queue.poll();
-      if (node.isLeafNode()) {
-        downloadedUrls.add(node.getUrl());
+      log.debug("The next node from queue: {}", node);
+
+      node.waitProcessing();
+
+      if (node.getError() != null) {
+        log.debug("Node {} with error {}", node, node.getError());
+        errors.put(node.getUrl(), node.getError());
       } else {
-        synchronized (node) {
-          while (node.getChilds().isEmpty() || node.getError() == null) {
-            node.wait();
-          }
-        }
-        if (node.getError() != null) {
-          errors.put(node.getUrl(), node.getError());
-        } else {
-          queue.addAll(node.getChilds());
+        if (!node.isRepeated()) {
           downloadedUrls.add(node.getUrl());
+          if (!node.isLeafNode()) {
+            log.debug("Add to queue child nodes: {}", node.getChilds());
+            queue.addAll(node.getChilds());
+          }
         }
       }
     }
 
-    return new Result(downloadedUrls, errors);
+    log.debug("Result downloaded size {}, error size {}", downloadedUrls.size(), errors.size());
+    return new Result(new ArrayList<>(downloadedUrls), errors);
   }
 
   @Override
   public void close() {
-
+    extractExecutors.shutdown();
+    downloadExecutors.shutdown();
   }
 }
 

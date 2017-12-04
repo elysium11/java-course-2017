@@ -16,7 +16,7 @@ public class DownloadHandler {
 
   private static Logger log = LoggerFactory.getLogger(DownloadHandler.class);
 
-  private static final Document ERROR_DOCUMENT = Collections::emptyList;
+  public static final Document ERROR_DOCUMENT = Collections::emptyList;
 
   private final Map<String, List<Node>> waitingForDownload = new HashMap<>();
   private final Map<String, Document> downloadedUrls = new HashMap<>();
@@ -29,73 +29,106 @@ public class DownloadHandler {
   }
 
   public void download(Node node, Consumer<? super Node> callBack) {
-    Document document;
+//    Document document;
     List<Node> waiters = null;
 
-    log.debug("[{}]: Starting download url '{}'", Thread.currentThread().getName(), node.getUrl());
+    log.debug("Starting download url '{}'", node.getUrl());
+
+//    document = searchInAlreadyDownloaded(node);
+//    if (document != null) {
+//      log.debug("Found in already downloaded => return with result '{}'", node.getUrl()
+//      );
+//      node.setDocument(document);
+//      callBack.accept(node);
+//      return;
+//    }
+
     downloadedUrlsLock.readLock().lock();
-    document = downloadedUrls.get(node.getUrl());
-    log.debug("[{}]: Searching in downloaded urls result '{}'", Thread.currentThread().getName(),
-        document);
-    downloadedUrlsLock.readLock().unlock();
-
+    Document document = downloadedUrls.get(node.getUrl());
     if (document == null) {
-      synchronized (waitingForDownload) {
+      downloadedUrlsLock.writeLock().lock();
+      downloadedUrls.put(node.getUrl(), ERROR_DOCUMENT);
+      downloadedUrlsLock.writeLock().unlock();
+    }
+    downloadedUrlsLock.readLock().lock();
 
-        log.debug("[{}]: Try found node '{}' in waiting list ", Thread.currentThread().getName(),
-            node.getUrl());
-        downloadedUrlsLock.readLock().lock();
-        document = downloadedUrls.get(node.getUrl());
-        log.debug("[{}]: Searching in downloaded urls result '{}'",
-            Thread.currentThread().getName(),
-            document);
-        downloadedUrlsLock.readLock().unlock();
 
-        if (document == null) {
-          if (waitingForDownload.containsKey(node.getUrl())) {
-            log.debug("[{}]: Node '{}' found => add to waiters", Thread.currentThread().getName(),
-                node.getUrl());
-            waitingForDownload.get(node.getUrl()).add(node);
-            return;
-          } else {
-            log.debug("[{}]: Node '{}' not found => need to download",
-                Thread.currentThread().getName(),
-                node.getUrl());
-            waitingForDownload.put(node.getUrl(), initWaiters(node));
-          }
-        }
-      }
 
-      if (document == null) {
-        try {
-          log.debug("[{}]: Try to download '{}'", Thread.currentThread().getName(), node.getUrl());
-          document = downloader.download(node.getUrl());
-        } catch (IOException e) {
-          log.debug("[{}]: Error '{}' during download '{}'", Thread.currentThread().getName(), e,
-              node.getUrl());
-          node.setError(e);
-          document = ERROR_DOCUMENT;
-        }
+//    synchronized (waitingForDownload) {
 
-        synchronized (waitingForDownload) {
-          log.debug("[{}]: Remove '{}' from waiters", Thread.currentThread().getName(),
-              node.getUrl());
-          waiters = waitingForDownload.remove(node.getUrl());
-          downloadedUrlsLock.writeLock().lock();
-          log.debug("[{}]: Add to downloaded '{}'", Thread.currentThread().getName(),
-              node.getUrl());
-          downloadedUrls.put(node.getUrl(), document);
-          downloadedUrlsLock.writeLock().unlock();
-        }
-      }
+//      document = searchInAlreadyDownloaded(node);
+//      if (document != null) {
+//        log.debug("Found in already downloaded => return with result '{}'", node.getUrl());
+//        node.setDocument(document);
+//        return;
+//      }
+
+//      log.debug("Try found node '{}' in waiting list ", node.getUrl());
+//      if (waitingForDownload.containsKey(node.getUrl())) {
+//        log.debug("Node '{}' found => add to waiters and return",
+//
+//            node.getUrl());
+//        waitingForDownload.get(node.getUrl()).add(node);
+//        return;
+//      } else {
+//        log.debug("Node '{}' not found => need to download",
+//
+//            node.getUrl());
+//        waitingForDownload.put(node.getUrl(), initWaiters(node));
+//      }
+//  }
+
+    try
+
+    {
+      log.debug("Try to download '{}'", node.getUrl());
+      document = downloader.download(node.getUrl());
+    } catch (
+        IOException e)
+
+    {
+      log.debug("Error '{}' during download '{}'", e, node.getUrl());
+      node.setError(e);
+      document = ERROR_DOCUMENT;
     }
 
-    for (Node waiter : waiters) {
+    synchronized (waitingForDownload)
+
+    {
+      log.debug("Remove url '{}' from waiters", node.getUrl());
+      waiters = waitingForDownload.remove(node.getUrl());
+      log.debug("List of waiters to url '{}': {}", node.getUrl(), waiters);
+      downloadedUrlsLock.writeLock().lock();
+      log.debug("Put to downloaded '{}'", node.getUrl());
+      downloadedUrls.put(node.getUrl(), document);
+      downloadedUrlsLock.writeLock().unlock();
+    }
+
+    for (
+        Node waiter : waiters)
+
+    {
       waiter.setDocument(document);
-      log.debug("[{}]: Invoke call back for '{}'", Thread.currentThread().getName(),
-          waiter.getUrl());
+      log.debug("Invoke call back for waiter '{}'", waiter.getUrl());
       callBack.accept(waiter);
     }
+
+  }
+
+  Document searchInAlreadyDownloaded(Node node) {
+    downloadedUrlsLock.readLock().lock();
+    Document document = downloadedUrls.get(node.getUrl());
+    log.debug(
+        "Searching in downloaded urls result '{}'", document);
+    downloadedUrlsLock.readLock().unlock();
+    return document;
+  }
+
+  void addToAlreadyDownloaded(String url, Document document) {
+    downloadedUrlsLock.writeLock().lock();
+    log.debug("Put url '{}' to downloaded", url);
+    downloadedUrls.put(url, document);
+    downloadedUrlsLock.writeLock().unlock();
   }
 
   private ArrayList<Node> initWaiters(Node node) {
@@ -103,9 +136,4 @@ public class DownloadHandler {
       add(node);
     }};
   }
-
-  private void handlerIOException(Node node) {
-
-  }
-
 }
