@@ -43,16 +43,13 @@ public class Node {
     this.childs = childs;
   }
 
-  public void addChild(Node node) {
-    childs.add(node);
-  }
-
   public IOException getError() {
     return error;
   }
 
   public void setError(IOException exception) {
     this.error = exception;
+    processed();
   }
 
   public int getNodeDepth() {
@@ -63,29 +60,19 @@ public class Node {
     return maxDepth;
   }
 
-
-  public Object getLock() {
-    return lock;
-  }
-
   public boolean isLeafNode() {
     return nodeDepth == maxDepth;
   }
 
-  public boolean isProcessed() {
-    return processed;
-  }
 
   public boolean notProcessed() {
-//    synchronized (lock) {
       return !processed;
-//    }
   }
 
   public void processed(boolean isRepeated) {
     synchronized (lock) {
       processed = true;
-      this.repeated = isRepeated;
+      repeated = isRepeated;
       lock.notify();
     }
   }
@@ -93,7 +80,16 @@ public class Node {
   public void processed() {
     synchronized (lock) {
       processed = true;
-      this.repeated = false;
+      repeated = false;
+      lock.notify();
+    }
+  }
+
+  private void processed(IOException e) {
+    synchronized (lock) {
+      processed = true;
+      repeated = false;
+      error = e;
       lock.notify();
     }
   }
