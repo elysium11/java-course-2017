@@ -1,7 +1,6 @@
 import static java.util.stream.Collectors.toList;
 
 import info.kgeorgiy.java.advanced.crawler.Document;
-import info.kgeorgiy.java.advanced.crawler.Downloader;
 import info.kgeorgiy.java.advanced.crawler.Result;
 import java.io.IOException;
 import java.util.ArrayList;

@@ -7,6 +7,7 @@ import java.util.concurrent.Executors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+//todo: polish shutdown, change setError() to processed(error), add main
 public class WebCrawlerV2 implements Crawler {
 
   private static final Logger log = LoggerFactory.getLogger(WebCrawler.class);
