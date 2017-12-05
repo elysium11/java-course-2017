@@ -6,6 +6,7 @@ import info.kgeorgiy.java.advanced.crawler.CachingDownloader;
 import info.kgeorgiy.java.advanced.crawler.Crawler;
 import info.kgeorgiy.java.advanced.crawler.Downloader;
 import info.kgeorgiy.java.advanced.crawler.Result;
+import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.concurrent.ExecutorService;
@@ -19,7 +20,8 @@ public class WebCrawler implements Crawler {
 
   private static final Logger log = LoggerFactory.getLogger(WebCrawler.class);
 
-  private static final Path DOWNLOADED_URLS_DIR = Paths.get("/home/ilnur/download-urls");
+  private static final Path DOWNLOADED_URLS_DIR =
+      Paths.get(System.getProperty("user.home") + File.pathSeparator + "khafizov-lab8-downloads");
 
   private final ExecutorService downloadExecutors;
   private final ExecutorService extractExecutors;
