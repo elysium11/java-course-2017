@@ -1,6 +1,10 @@
 package info.kgeorgiy.java.advanced.crawler;
 
+import static java.util.stream.Collectors.toList;
+
 import info.kgeorgiy.java.advanced.base.BaseTest;
+import java.util.List;
+import java.util.stream.IntStream;
 import org.junit.Assert;
 import org.junit.FixMethodOrder;
 import org.junit.Rule;
@@ -59,7 +63,11 @@ public class CrawlerEasyTest extends BaseTest {
 
     @Test
     public void test07_limitExtractors() throws IOException {
+//      List<Integer> collect = IntStream.range(0, 10000).boxed().collect(toList());
+//      for (Integer integer : collect) {
         test(Integer.MAX_VALUE, 10, Integer.MAX_VALUE, 10, 300);
+//        System.out.println("Iter " + integer);
+//      }
     }
 
     @Test

@@ -6,6 +6,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -54,5 +55,13 @@ public class ParallelMapperImpl implements ParallelMapper {
   @Override
   public void close() throws InterruptedException {
     executorService.shutdown();
+    if (!executorService.awaitTermination(20, TimeUnit.SECONDS)) {
+      executorService.shutdownNow();
+
+      if (!executorService.awaitTermination(20, TimeUnit.SECONDS)) {
+        System.err.println("Could not terminate executor service");
+        System.exit(1);
+      }
+    }
   }
 }

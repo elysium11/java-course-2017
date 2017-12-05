@@ -1,3 +1,5 @@
+package ru.ilnurkhafizoff;
+
 import static java.util.stream.Collectors.toList;
 
 import info.kgeorgiy.java.advanced.crawler.Document;
@@ -38,7 +40,7 @@ public class UrlProcessor {
     this.downloaderHandler = downloadHandler;
   }
 
-  public Result processUrl(String url, int maxDepth) throws InterruptedException {
+  public Result processUrl(String url, int maxDepth) {
     if (maxDepth < 1) {
       throw new IllegalArgumentException("Max Depth should be greater than 1");
     }
@@ -82,62 +84,72 @@ public class UrlProcessor {
   }
 
   private void asyncDownload(Node node) {
-    downloaders.submit(() -> {
-      if (!Thread.currentThread().isInterrupted()) {
-        try {
-          Document document = downloaderHandler.download(node.getUrl());
-          node.setDocument(document);
+    if (downloaders.isShutdown()) {
+      node.interrupted();
+      return;
+    }
 
-          node.processed();
-        } catch (IOException e) {
-          node.setError(e);
-        } catch (InterruptedException e) {
-          log.debug("Interrupted during download url {}", node.getUrl());
-        }
+    downloaders.submit(() -> {
+      try {
+        Document document = downloaderHandler.download(node.getUrl());
+        node.setDocument(document);
+
+        node.processed();
+      } catch (IOException e) {
+        node.processed(e);
+      } catch (InterruptedException e) {
+        log.debug("Interrupted during download url {}", node.getUrl());
+        node.interrupted();
       }
     });
   }
 
   private void asyncDownloadAndExtract(Node node) {
-    downloaders.submit(() -> {
-      if (!Thread.currentThread().isInterrupted()) {
-        try {
-          Document document = downloaderHandler.download(node.getUrl());
-          node.setDocument(document);
+    if (downloaders.isShutdown()) {
+      node.interrupted();
+      return;
+    }
 
-          asyncExtractAndSendToProcessing(node);
-        } catch (IOException e) {
-          node.setError(e);
-        } catch (InterruptedException e) {
-          log.debug("Interrupted during download url {}", node.getUrl());
-        }
+    downloaders.submit(() -> {
+      try {
+        Document document = downloaderHandler.download(node.getUrl());
+        node.setDocument(document);
+
+        asyncExtractAndSendToProcessing(node);
+      } catch (IOException e) {
+        node.processed(e);
+      } catch (InterruptedException e) {
+        log.debug("Interrupted during download url {}", node.getUrl());
+        node.interrupted();
       }
     });
   }
 
   private void asyncExtractAndSendToProcessing(Node node) {
+    if (extractors.isShutdown()) {
+      node.interrupted();
+      return;
+    }
+
     extractors.submit(() -> {
-      if (!Thread.currentThread().isInterrupted()) {
-        try {
-          List<String> childLinks = node.getDocument().extractLinks();
-          List<Node> childNodes = childLinks.stream()
-              .map(cl -> new Node(cl, node.getNodeDepth() + 1, node.getMaxDepth()))
-              .collect(toList());
+      try {
+        List<Node> childNodes = node.getDocument().extractLinks().stream()
+            .map(cl -> new Node(cl, node.getNodeDepth() + 1, node.getMaxDepth()))
+            .collect(toList());
 
-          node.setChilds(childNodes);
+        node.setChilds(childNodes);
 
-          childNodes.forEach(this::processNode);
+        childNodes.forEach(this::processNode);
 
-          node.processed();
-        } catch (IOException e) {
-          node.setError(e);
-        }
+        node.processed();
+      } catch (IOException e) {
+        node.processed(e);
       }
     });
   }
 
   // Blocking BFS
-  private Result gatherDownloadedUrls(Node rootNode) throws InterruptedException {
+  private Result gatherDownloadedUrls(Node rootNode) {
     log.debug("Start gathering...");
     List<String> downloadedUrls = new ArrayList<>();
     HashMap<String, IOException> errors = new HashMap<>();
@@ -148,19 +160,28 @@ public class UrlProcessor {
       Node node = queue.poll();
       log.debug("The next node from queue: {}", node);
 
-      node.waitProcessing();
+      try {
+        node.waitProcessing();
+      } catch (InterruptedException e) {
+        log.info(
+            "Interrupted during wait processing url {}. Return result with already processed urls.",
+            node.getUrl()
+        );
+        return new Result(downloadedUrls, errors);
+      }
 
       if (node.getError() != null) {
         log.debug("Node {} with error {}", node, node.getError());
         errors.put(node.getUrl(), node.getError());
       } else {
-        if (!node.isRepeated()) {
-          downloadedUrls.add(node.getUrl());
-          if (!node.isLeafNode()) {
-            log.debug("Add to queue child nodes: {}", node.getChilds());
-            queue.addAll(node.getChilds());
-          }
+        if (node.isRepeated() || node.isInterrupted()) {
+          continue;
         }
+
+        log.debug("Add result: {}", node.getUrl());
+        downloadedUrls.add(node.getUrl());
+        log.debug("Add to queue child nodes: {}", node.getChilds());
+        queue.addAll(node.getChilds());
       }
     }
 

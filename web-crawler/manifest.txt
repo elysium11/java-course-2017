@@ -1,0 +1,2 @@
+Manifest-Version: 1.0
+ru.ilnurkhafizoff.Main-Class: ru.ilnurkhafizoff.ru.ilnurkhafizoff.WebCrawler

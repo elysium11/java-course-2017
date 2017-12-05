@@ -1,5 +1,9 @@
 package info.kgeorgiy.java.advanced.crawler;
 
+import static java.util.stream.Collectors.toList;
+
+import java.util.List;
+import java.util.stream.IntStream;
 import org.junit.Assert;
 import org.junit.FixMethodOrder;
 import org.junit.Test;
@@ -14,7 +18,11 @@ import java.io.IOException;
 public class CrawlerHardTest extends CrawlerEasyTest {
     @Test
     public void test10_singleConnectionPerHost() throws IOException {
-        test("http://www.ifmo.ru", 2, Integer.MAX_VALUE, Integer.MAX_VALUE, 1, 10, 10);
+//        List<Integer> collect = IntStream.range(0, 100).boxed().collect(toList());
+//        for (Integer integer : collect) {
+            test("http://www.ifmo.ru", 2, Integer.MAX_VALUE, Integer.MAX_VALUE, 1, 10, 10);
+//            System.out.println("Iter " + integer);
+//        }
     }
 
     @Test
